@@ -18,7 +18,7 @@ epoch은 2로 고정하고 모델 이름만 바꾸면서 어떤 모델이 좋을
 4. beomi/Llama-3-Open-Ko-8B
 5. Bllossom/llama-3.2-Korean-Bllossom-3B-gguf-Q4_K_M
 6. Bllossom/llama-3.2-Korean-Bllossom-3B
-뭐 더 있으면 추가해도 됨
+뭐 더 있으면 추가해도 됨   
 
 * argument model_name에 이름 말고 /data/ephemeral/home/code/outputs_gemma-ko-2b와 같이 경로를 넣으면 훈련된 모델 load 가능   
 * 귀찮으면 model = LLM('/data/ephemeral/home/code/outputs_gemma-ko-2b/checkpoint-1827') 이런식으로 넣어도 로드 되게 해놨음   
