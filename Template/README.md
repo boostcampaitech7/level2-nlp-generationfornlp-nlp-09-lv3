@@ -1,4 +1,4 @@
-"""python
+```python
 from model import LLM
 model = LLM()
 
@@ -6,7 +6,7 @@ model.make_dataset() # traindataset을 만듬 (model.train_dataset으로 결과�
 model.view_data(idx) # idx에 해당하는 전처리된 데이터를 자연어의 형태로 확인
 model.train() # 만든 traindataset으로 훈련
 model.inferece() # 훈련된 모델을 바탕으로 추론
-"""
+```
 
 ### Baseline과 똑같이 동작하는 Template
 epoch은 2로 고정하고 모델 이름만 바꾸면서 어떤 모델이 좋을지를 비교해보도록 합시다
