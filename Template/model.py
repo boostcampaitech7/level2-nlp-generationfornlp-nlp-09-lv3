@@ -357,7 +357,6 @@ class LLM:
                 tar_probs.append(probs)
                 answers.append(predict_value)
         self.results = infer_results
-        test_df['predict_value'] = predict_value
         test_df['probs'] = tar_probs
         test_df['answers'] = answers
 
