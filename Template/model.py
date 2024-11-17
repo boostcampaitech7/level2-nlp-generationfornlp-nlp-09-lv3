@@ -11,15 +11,18 @@ from ast import literal_eval
 from tqdm import tqdm
 
 class LLM:
-    def __init__(self):
+    def __init__(self, route = None):
         self.args = model_args
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        if route == None:
+            route = self.args.model_name
         self.model = AutoModelForCausalLM.from_pretrained(
-            self.args.model_name,
+            route,
             torch_dtype=torch.float16,
             trust_remote_code=True,
-        )
+        ).to(self.device)
         self.tokenizer = AutoTokenizer.from_pretrained(
-            self.args.model_name,
+            route,
             trust_remote_code=True,
         )
         self.tokenizer.chat_template = (
@@ -259,8 +262,9 @@ class LLM:
 
         trainer.train()
 
-    def inference(self):
-        test_df = pd.read_csv(self.args.test_route)
+    def inference(self, test_df = None):
+        if test_df == None:
+            test_df = pd.read_csv(self.args.test_route)
 
         # Flatten the JSON dataset
         records = []
@@ -315,11 +319,14 @@ class LLM:
                 }
             )
 
-        infer_results = []
         pred_choices_map = {0: "1", 1: "2", 2: "3", 3: "4", 4: "5"}
+        batch_size = self.args.inference_batch_size # 적절한 배치 사이즈 설정
+        infer_results = []
 
         self.model.eval()
         with torch.inference_mode():
+            tar_probs = []
+            answers = []
             for data in tqdm(test_dataset):
                 _id = data["id"]
                 messages = data["messages"]
@@ -333,11 +340,10 @@ class LLM:
                         return_tensors="pt",
                     ).to("cuda")
                 )
-
+                
                 logits = outputs.logits[:, -1].flatten().cpu()
-
+                
                 target_logit_list = [logits[self.tokenizer.vocab[str(i + 1)]] for i in range(len_choices)]
-
                 probs = (
                     torch.nn.functional.softmax(
                         torch.tensor(target_logit_list, dtype=torch.float32)
@@ -346,9 +352,14 @@ class LLM:
                     .cpu()
                     .numpy()
                 )
-
                 predict_value = pred_choices_map[np.argmax(probs, axis=-1)]
                 infer_results.append({"id": _id, "answer": predict_value})
+                tar_probs.append(probs)
+                answers.append(predict_value)
+        self.results = infer_results
+        test_df['predict_value'] = predict_value
+        test_df['probs'] = tar_probs
+        test_df['answers'] = answers
 
-        self.results = infer_results 
+        self.test_df = test_df
         pd.DataFrame(infer_results).to_csv('output.csv')
