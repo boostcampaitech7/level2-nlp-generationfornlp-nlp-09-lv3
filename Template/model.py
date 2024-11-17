@@ -351,4 +351,4 @@ class LLM:
                 infer_results.append({"id": _id, "answer": predict_value})
 
         self.results = infer_results 
-        infer_results.to_csv('output.csv')
+        pd.DataFrame(infer_results).to_csv('output.csv')
