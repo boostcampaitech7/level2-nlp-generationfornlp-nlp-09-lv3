@@ -160,7 +160,6 @@ class LLM:
             tokenize,
             remove_columns=list(processed_dataset.features),
             batched=True,
-            num_proc=4,
             load_from_cache_file=True,
             desc="Tokenizing",
         )
