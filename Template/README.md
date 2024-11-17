@@ -20,6 +20,10 @@ epoch은 2로 고정하고 모델 이름만 바꾸면서 어떤 모델이 좋을
 6. Bllossom/llama-3.2-Korean-Bllossom-3B
 뭐 더 있으면 추가해도 됨   
 
+gguf는 llama cpp 라이브러리를 설치해야 하는데,, 아직 버전 호환성 문제가 해결되지 않아서 사용 못해봄..   
+8B모델은 정상적인 방법으로는 터지는듯   
+inference 후 model.test_df로 확률분포를 확인할 수 있음.   
+
 * argument model_name에 이름 말고 /data/ephemeral/home/code/outputs_gemma-ko-2b와 같이 경로를 넣으면 훈련된 모델 load 가능   
 * 귀찮으면 model = LLM('/data/ephemeral/home/code/outputs_gemma-ko-2b/checkpoint-1827') 이런식으로 넣어도 로드 되게 해놨음   
 * inference 과정에서 batch 연산으로 좀 더 빠르게 추론할 수 있도록 해놨음(배치 연산하면 추론이 이상하게 되는 것 같아 다시 되돌렸음)
