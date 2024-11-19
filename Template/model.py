@@ -9,9 +9,10 @@ import evaluate
 from trl import SFTTrainer, DataCollatorForCompletionOnlyLM, SFTConfig
 from ast import literal_eval
 from tqdm import tqdm
+from prompts import prompts
 
 class LLM:
-    def __init__(self, route = None):
+    def __init__(self, route = None, prompt = None):
         self.args = model_args
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         if route == None:
@@ -25,20 +26,22 @@ class LLM:
             route,
             trust_remote_code=True,
         )
-        self.tokenizer.chat_template = (
-                    "{% if messages[0]['role'] == 'system' %}"
-                        "{% set system_message = messages[0]['content'] %}"
-                        "{% endif %}"
-                        "{% if system_message is defined %}{{ system_message }}{% endif %}"
-                        "{% for message in messages %}"
-                        "{% set content = message['content'] %}"
-                        "{% if message['role'] == 'user' %}"
-                        "{{ '<start_of_turn>user\n' + content + '<end_of_turn>\n<start_of_turn>model\n' }}"
-                        "{% elif message['role'] == 'assistant' %}"
-                        "{{ content + '<end_of_turn>\n' }}"
-                        "{% endif %}"
-                        "{% endfor %}"
-                    )
+        if self.tokenizer.chat_template == None:
+            self.tokenizer.chat_template = (
+                        "{% if messages[0]['role'] == 'system' %}"
+                            "{% set system_message = messages[0]['content'] %}"
+                            "{% endif %}"
+                            "{% if system_message is defined %}{{ system_message }}{% endif %}"
+                            "{% for message in messages %}"
+                            "{% set content = message['content'] %}"
+                            "{% if message['role'] == 'user' %}"
+                            "{{ '<start_of_turn>user\n' + content + '<end_of_turn>\n<start_of_turn>model\n' }}"
+                            "{% elif message['role'] == 'assistant' %}"
+                            "{{ content + '<end_of_turn>\n' }}"
+                            "{% endif %}"
+                            "{% endfor %}"
+                        )
+        
         
         self.PROMPT_NO_QUESTION_PLUS = """지문:
                         {paragraph}
@@ -66,7 +69,7 @@ class LLM:
 
                         1, 2, 3, 4, 5 중에 하나를 정답으로 고르세요.
                         정답:"""
-    
+        self.prompt = prompts.baseline if prompt == None else prompt
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
         self.tokenizer.padding_side = 'right'
@@ -147,7 +150,7 @@ class LLM:
                 {
                     "id": dataset[i]["id"],
                     "messages": [
-                        {"role": "system", "content": "지문을 읽고 질문의 답을 구하세요."},
+                        {"role": "system", "content": self.prompt},
                         {"role": "user", "content": user_message},
                         {"role": "assistant", "content": f"{dataset[i]['answer']}"}
                     ],
@@ -214,7 +217,8 @@ class LLM:
 # --------------------------------------------------------------------------------------------------------------------------
 
     def train(self):
-        response_template = "<start_of_turn>model"
+        response_template = 'assistant'
+        print(response_template,'부터 로스를 계산합니다.')
         data_collator = DataCollatorForCompletionOnlyLM(
             response_template=response_template,
             tokenizer=self.tokenizer,
@@ -261,7 +265,7 @@ class LLM:
 
         trainer.train()
 
-    def inference(self, test_df = None):
+    def inference(self, test_df = None, mode = 'logit_base'):
         if test_df == None:
             test_df = pd.read_csv(self.args.test_route)
 
@@ -310,7 +314,7 @@ class LLM:
                 {
                     "id": row["id"],
                     "messages": [
-                        {"role": "system", "content": "지문을 읽고 질문의 답을 구하세요."},
+                        {"role": "system", "content": self.prompt},
                         {"role": "user", "content": user_message},
                     ],
                     "label": row["answer"],
@@ -320,44 +324,92 @@ class LLM:
 
         pred_choices_map = {0: "1", 1: "2", 2: "3", 3: "4", 4: "5"}
         batch_size = self.args.inference_batch_size # 적절한 배치 사이즈 설정
+    
         infer_results = []
+        if mode == 'logit_base':
+            self.model.eval()
+            with torch.inference_mode():
+                tar_probs = []
+                answers = []
+                for data in tqdm(test_dataset):
+                    _id = data["id"]
+                    messages = data["messages"]
+                    len_choices = data["len_choices"]
 
-        self.model.eval()
-        with torch.inference_mode():
-            tar_probs = []
-            answers = []
-            for data in tqdm(test_dataset):
-                _id = data["id"]
-                messages = data["messages"]
-                len_choices = data["len_choices"]
+                    outputs = self.model(
+                        self.tokenizer.apply_chat_template(
+                            messages,
+                            tokenize=True,
+                            add_generation_prompt=True,
+                            return_tensors="pt",
+                        ).to("cuda")
+                    )
+                    
+                    logits = outputs.logits[:, -1].flatten().cpu()
+                    
+                    target_logit_list = [logits[self.tokenizer.vocab[str(i + 1)]] for i in range(len_choices)]
+                    probs = (
+                        torch.nn.functional.softmax(
+                            torch.tensor(target_logit_list, dtype=torch.float32)
+                        )
+                        .detach()
+                        .cpu()
+                        .numpy()
+                    )
+                    predict_value = pred_choices_map[np.argmax(probs, axis=-1)]
+                    infer_results.append({"id": _id, "answer": predict_value})
+                    tar_probs.append(probs)
+                    answers.append(predict_value)
 
-                outputs = self.model(
-                    self.tokenizer.apply_chat_template(
+            self.results = pd.DataFrame(infer_results)
+            test_df['probs'] = tar_probs
+            test_df['answers'] = answers
+
+            self.test_df = test_df
+
+            pd.DataFrame(infer_results).to_csv('output_logit_base.csv')
+
+        elif mode == 'generative_base':
+            generated_infer_results = []
+            self.model.eval()
+            with torch.inference_mode():
+                for idx, data in enumerate(tqdm(test_dataset)):
+                    _id = data["id"]
+                    messages = data["messages"]
+                    len_choices = data["len_choices"]
+
+                    # 텍스트 생성을 위한 입력 데이터 준비
+                    inputs = self.tokenizer.apply_chat_template(
                         messages,
                         tokenize=True,
                         add_generation_prompt=True,
                         return_tensors="pt",
                     ).to("cuda")
-                )
-                
-                logits = outputs.logits[:, -1].flatten().cpu()
-                
-                target_logit_list = [logits[self.tokenizer.vocab[str(i + 1)]] for i in range(len_choices)]
-                probs = (
-                    torch.nn.functional.softmax(
-                        torch.tensor(target_logit_list, dtype=torch.float32)
+                    self.inputs = inputs
+                    # 모델을 이용한 텍스트 생성
+                    outputs = self.model.generate(
+                        inputs,
+                        max_new_tokens=2,  # 최대 생성 토큰 수
+                        pad_token_id=self.tokenizer.pad_token_id,
                     )
-                    .detach()
-                    .cpu()
-                    .numpy()
-                )
-                predict_value = pred_choices_map[np.argmax(probs, axis=-1)]
-                infer_results.append({"id": _id, "answer": predict_value})
-                tar_probs.append(probs)
-                answers.append(predict_value)
-        self.results = infer_results
-        test_df['probs'] = tar_probs
-        test_df['answers'] = answers
-
-        self.test_df = test_df
-        pd.DataFrame(infer_results).to_csv('output.csv')
+                    self.outputs = outputs
+                    # 생성된 텍스트 디코딩
+                    generated_text = self.tokenizer.batch_decode(
+                        outputs[:, inputs.shape[1]], skip_special_tokens=True
+                    )[0]
+                    generated_text = generated_text.strip()
+                    try:
+                        generated_text = int(generated_text)
+                    except:
+                        print(generated_text,'에서 오류 발생')
+                        generated_text = 1
+                    # 생성된 텍스트와 라벨을 결과 리스트에 추가
+                    generated_infer_results.append({
+                        "id": _id,  # 고유 ID
+                        "answer": int(generated_text),  # 생성된 텍스트
+                        "label": data["label"]  # 실제 라벨이 있다면, data에서 가져옴
+                    })
+            generated_infer_results = pd.DataFrame(generated_infer_results)
+            self.results = generated_infer_results
+            generated_infer_results.to_csv('output_generative_base.csv')
+            
