@@ -41,6 +41,9 @@ class LLM:
                             "{% endif %}"
                             "{% endfor %}"
                         )
+            self.response_template = "<start_of_turn>model"
+        else:
+            self.response_template = "assistant<|end_header_id|>"
         
         
         self.PROMPT_NO_QUESTION_PLUS = """지문:
@@ -217,10 +220,9 @@ class LLM:
 # --------------------------------------------------------------------------------------------------------------------------
 
     def train(self):
-        response_template = 'assistant'
-        print(response_template,'부터 로스를 계산합니다.')
+        print(self.response_template,'부터 로스를 계산합니다.')
         data_collator = DataCollatorForCompletionOnlyLM(
-            response_template=response_template,
+            response_template=self.response_template,
             tokenizer=self.tokenizer,
         )
         peft_config = LoraConfig(
