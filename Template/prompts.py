@@ -45,3 +45,11 @@ class prompts:
                     5번: (선택지 5번에 대한 답변) + "근거"',
         metadata = {'help' : "메뉴얼을 상세히 지정"}
     )
+    cot_5step: Optional[str] = field(
+        default = """1. Read and understand the paragraph meticulously.
+                    2. Read and understand the question carefully.
+                    3. Describe the process of solving the question based on your understanding.
+                    4. What is the answer?
+                    5. Choose the answer that most closely resembles the expected answer in the choice.""",
+        metadata = {'help' : "cot_5step"},
+    )

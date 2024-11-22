@@ -5,15 +5,15 @@ from typing import Optional
 @dataclass
 class model_args:
     model_name: Optional[str] = field(
-        default = 'beomi/gemma-ko-2b',
+        default = 'CarrotAI/Llama-3.2-Rabbit-Ko-3B-Instruct',
         metadata = {'help' : "model_name"},
     )
     data_route: Optional[str] = field(
-        default = 'train.csv',
+        default = '../data/train.csv',
         metadata = {'help' : "model_name"},
     )
     test_route: Optional[str] = field(
-        default = 'test.csv',
+        default = '../data/test.csv',
         metadata = {'help' : 'test_route'}
     )
     max_seq_length: int = field(
