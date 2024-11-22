@@ -29,7 +29,7 @@ class model_args:
         metadata = {'help' : 'eval_batch_size'}
     )
     num_train_epochs: int = field(
-        default = 2,
+        default = 6,
         metadata = {'help' : 'max_epoch'}
     )
     learning_rate: float = field(

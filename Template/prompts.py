@@ -53,3 +53,7 @@ class prompts:
                     5. Choose the answer that most closely resembles the expected answer in the choice.""",
         metadata = {'help' : "cot_5step"},
     )
+    short_cot: Optional[str] = field(
+        default = '지문, 질문, 선택지를 읽고 각 선택지에 대한 근거를 작성하고 정답을 구하세요.',
+        metadata = {'help' : "short_cot"},
+    )

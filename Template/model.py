@@ -251,6 +251,7 @@ class LLM:
             save_total_limit=2,
             save_only_model=True,
             report_to="none",
+            gradient_accumulation_steps=4
         )
 
         trainer = SFTTrainer(
@@ -325,7 +326,6 @@ class LLM:
             )
 
         pred_choices_map = {0: "1", 1: "2", 2: "3", 3: "4", 4: "5"}
-        batch_size = self.args.inference_batch_size # 적절한 배치 사이즈 설정
     
         infer_results = []
         if mode == 'logit_base':
