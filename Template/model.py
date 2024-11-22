@@ -1,7 +1,7 @@
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from arguments import model_args
-from peft import LoraConfig
+from peft import LoraConfig, get_peft_model
 import pandas as pd
 from datasets import Dataset
 import numpy as np
@@ -17,15 +17,43 @@ class LLM:
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         if route == None:
             route = self.args.model_name
-        self.model = AutoModelForCausalLM.from_pretrained(
+
+        if route.find('8') != -1:
+            self.model = AutoModelForCausalLM.from_pretrained(
             route,
-            torch_dtype=torch.float16,
-            trust_remote_code=True,
-        ).to(self.device)
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            route,
-            trust_remote_code=True,
-        )
+            load_in_8bit=True,
+            device_map="auto",
+            )
+            self.model.enable_input_require_grads()
+            peft_config = LoraConfig(
+                    r=8,
+                    lora_alpha=32,
+                    lora_dropout=0.05,
+                    target_modules=['q_proj', 'v_proj'],
+                    bias="none",
+                    task_type="CAUSAL_LM",
+                )
+            self.model = get_peft_model(self.model, peft_config)
+            self.model.config.use_cache = False
+
+        else:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                route,
+                torch_dtype=torch.float16,
+                trust_remote_code=True,
+            ).to(self.device)
+            peft_config = LoraConfig(
+                    r=8,
+                    lora_alpha=32,
+                    lora_dropout=0.05,
+                    target_modules=['q_proj', 'v_proj'],
+                    bias="none",
+                    task_type="CAUSAL_LM",
+                )
+            self.model = get_peft_model(self.model, peft_config)
+
+        self.tokenizer = AutoTokenizer.from_pretrained(route,
+                                                        trust_remote_code=True,)
         if self.tokenizer.chat_template == None:
             self.tokenizer.chat_template = (
                         "{% if messages[0]['role'] == 'system' %}"
@@ -225,14 +253,6 @@ class LLM:
             response_template=self.response_template,
             tokenizer=self.tokenizer,
         )
-        peft_config = LoraConfig(
-                r=6,
-                lora_alpha=8,
-                lora_dropout=0.05,
-                target_modules=['q_proj', 'k_proj'],
-                bias="none",
-                task_type="CAUSAL_LM",
-            )
 
         sft_config = SFTConfig(
             do_train=True,
@@ -243,11 +263,13 @@ class LLM:
             per_device_train_batch_size=self.args.per_device_train_batch_size,
             per_device_eval_batch_size=self.args.per_device_eval_batch_size,
             num_train_epochs=self.args.num_train_epochs,
+            gradient_accumulation_steps=self.args.gradient_accumulation_steps,
             learning_rate=self.args.learning_rate,
             weight_decay=self.args.weight_decay,
             logging_steps=self.args.logging_steps,
             save_strategy="epoch",
             eval_strategy="epoch",
+            gradient_checkpointing=self.args.gradient_checkpointing,
             save_total_limit=2,
             save_only_model=True,
             report_to="none",
@@ -261,7 +283,6 @@ class LLM:
             tokenizer=self.tokenizer,
             compute_metrics=self.compute_metrics,
             preprocess_logits_for_metrics=self.preprocess_logits_for_metrics,
-            peft_config=peft_config,
             args=sft_config,
         )
 
@@ -325,7 +346,6 @@ class LLM:
             )
 
         pred_choices_map = {0: "1", 1: "2", 2: "3", 3: "4", 4: "5"}
-        batch_size = self.args.inference_batch_size # 적절한 배치 사이즈 설정
     
         infer_results = []
         if mode == 'logit_base':
