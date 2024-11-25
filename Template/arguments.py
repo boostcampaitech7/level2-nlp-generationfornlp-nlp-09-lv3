@@ -5,11 +5,11 @@ from typing import Optional
 @dataclass
 class model_args:
     model_name: Optional[str] = field(
-        default = 'sh2orc/Llama-3.1-Korean-8B-Instruct',
+        default = 'MLP-KTLim/llama-3-Korean-Bllossom-8B',
         metadata = {'help' : "model_name"},
     )
     data_route: Optional[str] = field(
-        default = '/data/ephemeral/home/code/datas/train.csv',
+        default = 'datas/train_why.csv',
         metadata = {'help' : "model_name"},
     )
     test_route: Optional[str] = field(

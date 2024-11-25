@@ -9,39 +9,60 @@ import evaluate
 from trl import SFTTrainer, DataCollatorForCompletionOnlyLM, SFTConfig
 from ast import literal_eval
 from tqdm import tqdm
-from prompts import prompts
+from prompts import system_prompts, user_prompts
+from transformers import BitsAndBytesConfig
+
 
 class LLM:
-    def __init__(self, route = None, prompt = None):
+    def __init__(self, route = None,
+                  user_prompt = None,
+                  user_prompt_plus = None,
+                  system_prompt = None):
         self.args = model_args
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         if route == None:
             route = self.args.model_name
 
-        if route.find('8') != -1:
+        if route.find('8') or route.find('7') != -1:
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,  # QLoRA는 4bit 양자화를 사용
+                bnb_4bit_compute_dtype=torch.float16,  # 계산 precision (float16 또는 bfloat16 사용 가능)
+                bnb_4bit_use_double_quant=True,       # 이중 양자화 활성화
+                bnb_4bit_quant_type="nf4"             # NF4 양자화 타입
+            )
+
             self.model = AutoModelForCausalLM.from_pretrained(
-            route,
-            load_in_8bit=True,
-            device_map="auto",
+                route,
+                quantization_config=bnb_config,  # BitsAndBytesConfig 추가
+                device_map="auto",
             )
             self.model.enable_input_require_grads()
+
             peft_config = LoraConfig(
-                    r=8,
-                    lora_alpha=32,
-                    lora_dropout=0.05,
-                    target_modules=['q_proj', 'v_proj'],
-                    bias="none",
-                    task_type="CAUSAL_LM",
-                )
+                r=8,
+                lora_alpha=32,
+                lora_dropout=0.05,
+                target_modules=['q_proj', 'v_proj'],
+                bias="none",
+                task_type="CAUSAL_LM",
+            )
             self.model = get_peft_model(self.model, peft_config)
             self.model.config.use_cache = False
 
         else:
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,  # QLoRA는 4bit 양자화를 사용
+                bnb_4bit_compute_dtype=torch.float16,  # 계산 precision (float16 또는 bfloat16 사용 가능)
+                bnb_4bit_use_double_quant=True,       # 이중 양자화 활성화
+                bnb_4bit_quant_type="nf4"             # NF4 양자화 타입
+            )
+
             self.model = AutoModelForCausalLM.from_pretrained(
                 route,
-                torch_dtype=torch.float16,
-                trust_remote_code=True,
-            ).to(self.device)
+                quantization_config=bnb_config,  # BitsAndBytesConfig 추가
+                device_map="auto",
+            )
+            self.model.enable_input_require_grads()
             peft_config = LoraConfig(
                     r=8,
                     lora_alpha=32,
@@ -70,41 +91,27 @@ class LLM:
                             "{% endfor %}"
                         )
             self.response_template = "<start_of_turn>model"
-        else:
+        elif self.args.model_name.find('llama') != -1 or self.args.model_name.find('Llama') != -1:
             self.response_template = "assistant<|end_header_id|>"
+        elif self.args.model_name.find('Qwen') != -1:
+            self.tokenizer.eos_token = "<|endoftext|>"
+            self.tokenizer.eos_token_id = self.tokenizer.convert_tokens_to_ids("<|endoftext|>")
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+            self.response_template = "assistant"
+
+        self.user_prompt = user_prompts.baseline if user_prompt == None else user_prompt
+        self.user_prompt_plus = user_prompts.baseline_plus if user_prompt_plus == None else user_prompt_plus
         
-        
-        self.PROMPT_NO_QUESTION_PLUS = """지문:
-                        {paragraph}
+        self.PROMPT_NO_QUESTION_PLUS = self.user_prompt
+        self.PROMPT_QUESTION_PLUS = self.user_prompt_plus
 
-                        질문:
-                        {question}
-
-                        선택지:
-                        {choices}
-
-                        1, 2, 3, 4, 5 중에 하나를 정답으로 고르세요.
-                        정답:"""
-
-        self.PROMPT_QUESTION_PLUS = """지문:
-                        {paragraph}
-
-                        질문:
-                        {question}
-
-                        <보기>:
-                        {question_plus}
-
-                        선택지:
-                        {choices}
-
-                        1, 2, 3, 4, 5 중에 하나를 정답으로 고르세요.
-                        정답:"""
-        self.prompt = prompts.baseline if prompt == None else prompt
+        self.system_prompt = system_prompts.baseline if system_prompt == None else system_prompt
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
         self.tokenizer.padding_side = 'right'
         self.acc_metric = evaluate.load("accuracy")
+        self.f1_metric = evaluate.load('f1')
 # ------------------------------------------------------------------------------------------------------------
 
     def make_dataset(self):
@@ -146,6 +153,7 @@ class LLM:
                 'choices': problems['choices'],
                 'answer': problems.get('answer', None),
                 "question_plus": problems.get('question_plus', None),
+                "klue" : row.get('klue', None)
             }
             # Include 'question_plus' if it exists
             if 'question_plus' in problems:
@@ -155,7 +163,6 @@ class LLM:
         # Convert to DataFrame
         df = pd.DataFrame(records)
         dataset = Dataset.from_pandas(df)
-
         processed_dataset = []
         for i in range(len(dataset)):
             choices_string = "\n".join([f"{idx + 1} - {choice}" for idx, choice in enumerate(dataset[i]["choices"])])
@@ -181,9 +188,9 @@ class LLM:
                 {
                     "id": dataset[i]["id"],
                     "messages": [
-                        {"role": "system", "content": self.prompt},
+                        {"role": "system", "content": self.system_prompt},
                         {"role": "user", "content": user_message},
-                        {"role": "assistant", "content": f"{dataset[i]['answer']}"}
+                        {"role": "assistant", "content": f"{dataset[i]['klue']}\n최종 정답 :{dataset[i]['answer']}"}
                     ],
                     "label": dataset[i]["answer"],
                 }
@@ -233,17 +240,25 @@ class LLM:
         # 토큰화된 레이블 디코딩
         labels = np.where(labels != -100, labels, self.tokenizer.pad_token_id)
         labels = self.tokenizer.batch_decode(labels, skip_special_tokens=True)
-        labels = list(map(lambda x: x.split("<end_of_turn>")[0].strip(), labels))
+        self.test = labels
+        if labels[0].find('최종 정답') != -1:
+            labels = list(map(lambda x : x[-1],labels))
+        elif labels[0].find('#') != -1:
+            self.labels = list(map(lambda x: x[x.find('#'):].strip(), labels))
+        else:
+            labels = list(map(lambda x: x.split("<end_of_turn>")[0].strip(), labels))
+        
         labels = list(map(lambda x: int_output_map[x], labels))
 
         # 소프트맥스 함수를 사용하여 로그트 변환
         probs = torch.nn.functional.softmax(torch.tensor(logits, dtype=torch.float32), dim=-1)
 
         predictions = np.argmax(probs, axis=-1)
-
         # 정확도 계산
         acc = self.acc_metric.compute(predictions=predictions, references=labels)
-        return acc
+        f1 = self.f1_metric.compute(predictions=predictions, references=labels, average="macro")
+
+        return {"accuracy": acc["accuracy"], "f1": f1["f1"]}
     
 # --------------------------------------------------------------------------------------------------------------------------
 
@@ -274,6 +289,29 @@ class LLM:
             save_only_model=True,
             report_to="none",
         )
+        # 테스트용
+        # sft_config = SFTConfig(
+        #     do_train=True,
+        #     do_eval=True,
+        #     lr_scheduler_type="cosine",
+        #     max_seq_length=self.args.max_seq_length,
+        #     output_dir='outputs_'+self.args.model_name.split('/')[-1],
+        #     per_device_train_batch_size=self.args.per_device_train_batch_size,
+        #     per_device_eval_batch_size=self.args.per_device_eval_batch_size,
+        #     num_train_epochs=self.args.num_train_epochs,
+        #     gradient_accumulation_steps=self.args.gradient_accumulation_steps,
+        #     learning_rate=self.args.learning_rate,
+        #     weight_decay=self.args.weight_decay,
+        #     logging_steps=self.args.logging_steps,
+        #     save_strategy="epoch",
+        #     eval_strategy="steps",  # 변경
+        #     eval_steps=20,          # 20 step마다 evaluation
+        #     gradient_checkpointing=self.args.gradient_checkpointing,
+        #     save_total_limit=2,
+        #     save_only_model=True,
+        #     report_to="none",
+        # )
+
 
         trainer = SFTTrainer(
             model=self.model,
@@ -285,7 +323,7 @@ class LLM:
             preprocess_logits_for_metrics=self.preprocess_logits_for_metrics,
             args=sft_config,
         )
-
+        torch.cuda.empty_cache()
         trainer.train()
 
     def inference(self, test_df = None, mode = 'logit_base'):
@@ -337,7 +375,7 @@ class LLM:
                 {
                     "id": row["id"],
                     "messages": [
-                        {"role": "system", "content": self.prompt},
+                        {"role": "system", "content": self.system_prompt},
                         {"role": "user", "content": user_message},
                     ],
                     "label": row["answer"],
@@ -387,8 +425,6 @@ class LLM:
             test_df['probs'] = tar_probs
             test_df['answers'] = answers
 
-            self.test_df = test_df
-
             pd.DataFrame(infer_results).to_csv('output_logit_base.csv')
 
         elif mode == 'generative_base':
@@ -411,27 +447,21 @@ class LLM:
                     # 모델을 이용한 텍스트 생성
                     outputs = self.model.generate(
                         inputs,
-                        max_new_tokens=2,  # 최대 생성 토큰 수
+                        max_new_tokens=300,  # 최대 생성 토큰 수
                         pad_token_id=self.tokenizer.pad_token_id,
                     )
                     self.outputs = outputs
                     # 생성된 텍스트 디코딩
                     generated_text = self.tokenizer.batch_decode(
-                        outputs[:, inputs.shape[1]], skip_special_tokens=True
+                        outputs[:,inputs.shape[-1]:], skip_special_tokens=True
                     )[0]
                     generated_text = generated_text.strip()
-                    try:
-                        generated_text = int(generated_text)
-                    except:
-                        print(generated_text,'에서 오류 발생')
-                        generated_text = 1
-                    # 생성된 텍스트와 라벨을 결과 리스트에 추가
                     generated_infer_results.append({
                         "id": _id,  # 고유 ID
-                        "answer": int(generated_text),  # 생성된 텍스트
+                        "answer": generated_text,  # 생성된 텍스트
                         "label": data["label"]  # 실제 라벨이 있다면, data에서 가져옴
                     })
             generated_infer_results = pd.DataFrame(generated_infer_results)
             self.results = generated_infer_results
-            generated_infer_results.to_csv('output_generative_base.csv')
+            # generated_infer_results.to_csv('output_generative_base.csv')
             
