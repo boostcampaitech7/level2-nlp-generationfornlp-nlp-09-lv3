@@ -5,11 +5,11 @@ from typing import Optional
 @dataclass
 class model_args:
     model_name: Optional[str] = field(
-        default = 'MLP-KTLim/llama-3-Korean-Bllossom-8B',
+        default = 'CarrotAI/Llama-3.2-Rabbit-Ko-1B-Instruct',
         metadata = {'help' : "model_name"},
     )
     data_route: Optional[str] = field(
-        default = 'datas/train_why.csv',
+        default = 'datas/train+klue+hint.csv',
         metadata = {'help' : "model_name"},
     )
     test_route: Optional[str] = field(
@@ -49,7 +49,7 @@ class model_args:
         metadata = {'help' : 'gradient_accumulation_steps'}
     )
     gradient_checkpointing : bool = field(
-        default = True,
+        default = False,
         metadata = {'help' : """gradient checkpointing을 True로 줘야 8b모델이 돌아감
                     대신 매우 느리니 주의"""}
     )

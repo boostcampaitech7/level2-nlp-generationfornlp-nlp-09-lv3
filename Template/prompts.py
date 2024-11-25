@@ -156,3 +156,59 @@ class user_prompts:
                 """,
         metadata = {'help' : "메뉴얼을 상세히 지정"},)
 
+
+    klue: Optional[str] = field(
+        default =
+                """
+                지문 : {paragraph}
+                질문 : {question}
+                선택지 : {choices}
+                지문을 읽고 지문에 답하세요.
+                선택지 중 정답을 하나만 고르고 그 근거를 작성하세요.
+                출력 형식 : 근거 : [고른 정답에 대한 근거] # [정답 번호]
+                """,
+        metadata = {'help' : "메뉴얼을 상세히 지정"},)
+    
+    klue_plus: Optional[str] = field(
+        default =
+                """
+                지문 : {paragraph}
+                질문 : {question}
+                보기 : {question_plus}
+                선택지 : {choices}
+                지문을 읽고 지문에 답하세요.
+                선택지 중 정답을 하나만 고르고 그 근거를 작성하세요.
+                출력 형식 : 근거 : [고른 정답에 대한 근거] # [정답 번호]
+                """,
+        metadata = {'help' : "메뉴얼을 상세히 지정"},)
+
+
+    klue_hint: Optional[str] = field(
+        default =
+                """
+                지문 : {paragraph}
+                질문 : {question}
+                선택지 : {choices}
+                {hint}
+                지문을 읽고 지문에 답하세요.
+                선택지 중 정답을 하나만 고르고 그 근거를 작성하세요.
+                정답을 찾기 어렵다면 참고 문서를 참고하세요. 
+                출력 형식 : 근거 : [고른 정답에 대한 근거] # [정답 번호]
+                """,
+        metadata = {'help' : "메뉴얼을 상세히 지정"},)
+    
+    klue_hint_plus: Optional[str] = field(
+        default =
+                """
+                지문 : {paragraph}
+                질문 : {question}
+                보기 : {question_plus}
+                선택지 : {choices}
+                {hint}
+                지문을 읽고 지문에 답하세요.
+                선택지 중 정답을 하나만 고르고 그 근거를 작성하세요.
+                정답을 찾기 어렵다면 참고 문서를 참고하세요.
+                출력 형식 : 근거 : [고른 정답에 대한 근거] # [정답 번호]
+                """,
+        metadata = {'help' : "메뉴얼을 상세히 지정"},)
+

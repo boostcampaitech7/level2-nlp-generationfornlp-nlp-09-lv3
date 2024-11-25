@@ -67,7 +67,7 @@ class LLM:
                     r=8,
                     lora_alpha=32,
                     lora_dropout=0.05,
-                    target_modules=['q_proj', 'v_proj'],
+                    target_modules=['q_proj', 'v_proj', 'k_proj', 'o_proj'],
                     bias="none",
                     task_type="CAUSAL_LM",
                 )
@@ -153,7 +153,8 @@ class LLM:
                 'choices': problems['choices'],
                 'answer': problems.get('answer', None),
                 "question_plus": problems.get('question_plus', None),
-                "klue" : row.get('klue', None)
+                "klue" : row.get('klue', None),
+                'hint' : row.get('hint', '')
             }
             # Include 'question_plus' if it exists
             if 'question_plus' in problems:
@@ -173,6 +174,7 @@ class LLM:
                     paragraph=dataset[i]["paragraph"],
                     question=dataset[i]["question"],
                     question_plus=dataset[i]["question_plus"],
+                    hint = dataset[i]['hint'],
                     choices=choices_string,
                 )
             # <보기>가 없을 때
@@ -180,6 +182,7 @@ class LLM:
                 user_message = self.PROMPT_NO_QUESTION_PLUS.format(
                     paragraph=dataset[i]["paragraph"],
                     question=dataset[i]["question"],
+                    hint = dataset[i]['hint'],
                     choices=choices_string,
                 )
 
@@ -190,7 +193,7 @@ class LLM:
                     "messages": [
                         {"role": "system", "content": self.system_prompt},
                         {"role": "user", "content": user_message},
-                        {"role": "assistant", "content": f"{dataset[i]['klue']}\n최종 정답 :{dataset[i]['answer']}"}
+                        {"role": "assistant", "content": f"{dataset[i]['klue']}"}
                     ],
                     "label": dataset[i]["answer"],
                 }
@@ -227,6 +230,7 @@ class LLM:
                         self.tokenizer.vocab["3"],
                         self.tokenizer.vocab["4"], 
                         self.tokenizer.vocab["5"]]
+        self.logit_test = logits
         logits = logits[:, -2, logit_idx] # -2: answer token, -1: eos token
         return logits
 
@@ -244,7 +248,7 @@ class LLM:
         if labels[0].find('최종 정답') != -1:
             labels = list(map(lambda x : x[-1],labels))
         elif labels[0].find('#') != -1:
-            self.labels = list(map(lambda x: x[x.find('#'):].strip(), labels))
+            labels = list(map(lambda x: x[-1], labels))
         else:
             labels = list(map(lambda x: x.split("<end_of_turn>")[0].strip(), labels))
         
@@ -341,6 +345,7 @@ class LLM:
                 'choices': problems['choices'],
                 'answer': problems.get('answer', None),
                 "question_plus": problems.get('question_plus', None),
+                'hint' : row.get('hint', '')
             }
             # Include 'question_plus' if it exists
             if 'question_plus' in problems:
@@ -361,6 +366,7 @@ class LLM:
                     paragraph=row["paragraph"],
                     question=row["question"],
                     question_plus=row["question_plus"],
+                    hint = row['hint'],
                     choices=choices_string,
                 )
             # <보기>가 없을 때
@@ -368,6 +374,7 @@ class LLM:
                 user_message = self.PROMPT_NO_QUESTION_PLUS.format(
                     paragraph=row["paragraph"],
                     question=row["question"],
+                    hint = row['hint'],
                     choices=choices_string,
                 )
 
