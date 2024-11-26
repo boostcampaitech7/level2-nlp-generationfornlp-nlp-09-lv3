@@ -228,7 +228,7 @@ class LLM:
         peft_config = LoraConfig(
                 r=6,
                 lora_alpha=8,
-                lora_dropout=0.01,
+                lora_dropout=0.05,
                 target_modules=['q_proj', 'k_proj'],
                 bias="none",
                 task_type="CAUSAL_LM",
@@ -241,7 +241,6 @@ class LLM:
             max_seq_length=self.args.max_seq_length,
             output_dir='outputs_'+self.args.model_name.split('/')[-1],
             per_device_train_batch_size=self.args.per_device_train_batch_size,
-            eval_accumulation_steps=8,
             per_device_eval_batch_size=self.args.per_device_eval_batch_size,
             num_train_epochs=self.args.num_train_epochs,
             learning_rate=self.args.learning_rate,
@@ -252,6 +251,7 @@ class LLM:
             save_total_limit=2,
             save_only_model=True,
             report_to="none",
+            gradient_accumulation_steps=4
         )
 
         trainer = SFTTrainer(
