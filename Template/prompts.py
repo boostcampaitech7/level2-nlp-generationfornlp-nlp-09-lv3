@@ -211,4 +211,125 @@ class user_prompts:
                 출력 형식 : 근거 : [고른 정답에 대한 근거] # [정답 번호]
                 """,
         metadata = {'help' : "메뉴얼을 상세히 지정"},)
+    
+    이해형: Optional[str] = field(
+        default =
+"""
+문제 유형:
+{question_type}
 
+지문:
+{paragraph}
+
+질문:
+{question}
+{question_plus}
+선택지:
+{choices}
+
+출력 형식:
+근거: 답변을 도출한 텍스트 # 정답 번호
+
+문제는 무조건 1개의 정답만 있습니다.
+반드시 지문을 이해하고 이해한 내용을 바탕으로 정답을 고르세요.
+반드시 출력 형식을 지키세요.
+""",
+        metadata = {'help' : "메뉴얼을 상세히 지정"},)
+    기타: Optional[str] = field(
+        default =
+"""
+문제 유형:
+{question_type}
+
+지문:
+{paragraph}
+
+질문:
+{question}
+{question_plus}
+선택지:
+{choices}
+
+출력 형식:
+근거: 답변을 도출한 텍스트 # 정답 번호
+
+문제는 무조건 1개의 정답만 있습니다.
+문제를 풀이할 때, 반드시 지문을 참고하세요.
+반드시 지문에서 정답의 근거를 찾으세요.
+반드시 출력 형식을 지키세요.
+""",
+        metadata = {'help' : "메뉴얼을 상세히 지정"},)
+    사실형: Optional[str] = field(
+        default =
+"""
+문제 유형:
+{question_type}
+
+지문:
+{paragraph}
+
+질문:
+{question}
+{question_plus}
+선택지:
+{choices}
+
+출력 형식:
+근거: 답변을 도출한 텍스트 # 정답 번호
+
+문제는 무조건 1개의 정답만 있습니다.
+문제를 풀이할 때, 반드시 지문을 참고하세요.
+반드시 지문에서 정답의 근거를 찾으세요.
+반드시 출력 형식을 지키세요.
+
+""",
+        metadata = {'help' : "메뉴얼을 상세히 지정"},)
+    추론형: Optional[str] = field(
+        default =
+"""
+문제 유형:
+{question_type}
+
+지문:
+{paragraph}
+
+질문:
+{question}
+{question_plus}
+선택지:
+{choices}
+
+출력 형식:
+근거: 답변을 도출한 텍스트 # 정답 번호
+
+문제는 무조건 1개의 정답만 있습니다.
+먼저 질문에서 가리키는 것이 무엇인지 추론하세요.
+추론한 내용을 바탕으로 정답을 고르세요.
+반드시 출력 형식을 지키세요.
+
+""",
+        metadata = {'help' : "메뉴얼을 상세히 지정"},)
+    나열형: Optional[str] = field(
+        default =
+"""
+문제 유형:
+{question_type}
+
+지문:
+{paragraph}
+
+질문:
+{question}
+{question_plus}
+선택지:
+{choices}
+
+출력 형식:
+근거: 답변을 도출한 텍스트 # 정답 번호
+
+문제는 무조건 1개의 정답만 있습니다.
+각 사건이 일어난 시간을 고려해서 정답을 찾으세요.
+반드시 출력 형식을 지키세요.
+
+""",
+        metadata = {'help' : "메뉴얼을 상세히 지정"},)
